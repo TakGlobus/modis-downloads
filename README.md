@@ -9,3 +9,20 @@
 
 - requirement.txt:  
     package information. Run `pip install -r requirements.txt`
+
+## Example
+Edit and check `modis-wget.bash` if ;  
+- `$product` e.g. MOD021KM, MOD06_L2  
+- `$year` e.g 2011  
+- `$token` (you need to register and then get from LAADS website)
+- `$savedir` (which directory you will save the downloading data)
+are correctly set.  
+  
+And then
+```
+$ nohup python automation.py -m 'theta' -p '~/modis-downloads' -f 'modis-wget.bash' -y 2011 -b '/home/tkurihana/scratch-midway2/data' \
+                            -C nohup bash -s 1 100 200 300 -e 99 199 299 365 \
+                            --transfer \
+                            --sourcepathdir /home/tkurihana/scratch-midway2/data/MOD021KM/2011 \
+                            --destpathdir /eagle/Clouds/C6.1/L1/MOD021KM/2011
+```
