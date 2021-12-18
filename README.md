@@ -9,6 +9,16 @@
 
 - requirement.txt:  
     package information. Run `pip install -r requirements.txt`
+    
+## Prerequisite
+
+- `pip install globus-sdk`
+- `pip install funcx`
+- `pip install funcx-endpoint`
+
+### Caution
+You may need to install `funcx` and `funcx-endpoint` libraries on all machines using the downloading process i.e., if you run the automate.py between two remote machines, you need to download and start their endpoint.
+
 
 ## Example
 Edit and check `modis-wget.bash` if ;  
