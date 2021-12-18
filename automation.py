@@ -258,7 +258,7 @@ if __name__ == "__main__":
 
     # Argparse PARAM
     FLAGS=get_args()
-    launcher_sleep_time=30 # seconds
+    launcher_sleep_time=600 # seconds
     scrape_time=20 # seconds    
 
     # Type globus auth
@@ -276,7 +276,9 @@ if __name__ == "__main__":
         res = fxc.run(FLAGS.filepath, FLAGS.filename, FLAGS.CMD, [str(istart), str(iend)], 
                         function_id=func_uuid, 
                         endpoint_id=endpoints[FLAGS.machine])
-
+        while fxc.get_task(res)['pending'] == True:
+            time.sleep(5)
+        
     # Execute by funcx
     pollar_uuid =fxc.register_function(status_polling)
     scraper_uuid=fxc.register_function(status_scraper)
