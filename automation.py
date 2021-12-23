@@ -88,7 +88,43 @@ def status_polling(filepath:str, filename:str):
 
 ##################################################################
 
-def status_scraper(BASEDIR, year, UNIT='TB'):
+def status_scraper(BASEDIR, year, prefix, com_percents = {} ):
+    import os
+    import calendar
+
+    ndays  = 366 if calendar.isleap(year) else 365
+    nfiles = 288 # number of files might vary due to e.g. instrument errors 
+
+    for i in range(1,ndays+1,1):
+        day = str(i).zfill(3) 
+        DIR = os.path.join(*[BASEDIR, str(year), day])
+        try:
+            f = len([name for name in os.listdir(DIR) if os.path.isfile(os.path.join(DIR, name))])
+        except FileNotFoundError:
+            f = 0
+            pass
+        com_percent = f / nfiles * 100.0
+        com_percent = round(com_percent, 2)
+
+        try:
+            lastfile = sorted([name for name in os.listdir(DIR)])[-1]
+        except:
+            lastfile = None
+            pass
+        
+        if lastfile:
+            '''
+            e.g. MOD03.A2003199.2355.061.2017193154302.hdf
+            '''
+            lname = prefix+str(year)+day+".2355.061"
+            if lname in lastfile:
+                com_percent = 100.00 
+
+        com_percents[day] = com_percent
+
+    return com_percents
+
+def status_scraper_v1(BASEDIR, year, UNIT='TB'):
     import os
     import calendar
     from tqdm import tqdm
@@ -160,14 +196,14 @@ def polling_launcher(fxc, func_uuid):
     gr = fxc.get_result(res)
     return gr
 
-def scraper_launcher(fxc, func_uuid):
+def scraper_launcher(fxc, func_uuid, com_percents):
     """ 
         Args:
             fxc (FuncXClient) client object 
     """
     # Argparse PARAM
     FLAGS=get_args(False)
-    res = fxc.run(FLAGS.BASEDIR, FLAGS.year, function_id=func_uuid, endpoint_id=endpoints[FLAGS.machine])
+    res = fxc.run(FLAGS.BASEDIR, FLAGS.year, com_percents, function_id=func_uuid, endpoint_id=endpoints[FLAGS.machine])
     while fxc.get_task(res)['pending'] == True:
         time.sleep(5)    
     gr = fxc.get_result(res)
@@ -258,7 +294,7 @@ if __name__ == "__main__":
 
     # Argparse PARAM
     FLAGS=get_args()
-    launcher_sleep_time=30 # seconds
+    launcher_sleep_time=600 # seconds
     scrape_time=20 # seconds    
 
     # Type globus auth
@@ -268,6 +304,15 @@ if __name__ == "__main__":
     # Call client object
     fxc = FuncXClient()
 
+    # Prep percentage dictionary
+    # Initialization 
+    com_percents = {} 
+    for (istart, iend) in zip(FLAGS.start_list, FLAGS.end_list):
+        for i in range(int(istart), int(iend)+1, 1):
+            iday = str(i).zfill(3)
+            com_percents[iday] = 0.00
+
+
     # Execute download
     func_uuid=fxc.register_function(app_launcher)
     app_logger.info(f" Download function UUID : {func_uuid}")
@@ -276,7 +321,9 @@ if __name__ == "__main__":
         res = fxc.run(FLAGS.filepath, FLAGS.filename, FLAGS.CMD, [str(istart), str(iend)], 
                         function_id=func_uuid, 
                         endpoint_id=endpoints[FLAGS.machine])
-
+        while fxc.get_task(res)['pending'] == True:
+            time.sleep(5)
+        
     # Execute by funcx
     pollar_uuid =fxc.register_function(status_polling)
     scraper_uuid=fxc.register_function(status_scraper)
@@ -287,30 +334,37 @@ if __name__ == "__main__":
     while True:
         # polling script running status
         pr = polling_launcher(fxc, pollar_uuid)
-        sr = scraper_launcher(fxc, scraper_uuid)
+        sr = scraper_launcher(fxc, scraper_uuid, com_percents)
         time.sleep(launcher_sleep_time)
         
         # stop operation
         nowtime =  os.popen("date").read().rstrip('\n')
-        app_logger.info(f"{nowtime}  Status : {pr}  Complete {round(float(sr),2)} [%]")
+        app_logger.info(f"{nowtime}  Status : {pr}  Complete {sr} [%]")
         if pr == "Terminated or Hanged":
             break
 
-    if FLAGS.transfer:
-        # transfer operation
-        task_id = exec_trasfer(TRANSFER_TOKEN = TOKENS["TRANSFER_TOKEN"], 
-                    source_endpoint_id = globus_endpoints[FLAGS.machine],
-                    destination_endpoint_id = globus_endpoints['theta'],
-                    label='transfer to eagle theta MODIS',
-                    sourcepathdir=FLAGS.sourcepathdir, 
-                    destpathdir=FLAGS.destpathdir,
-                    recursive=True,
-                    )
+        if FLAGS.transfer:
+            for day_key, com_percent in sr.items():
+                if com_percent > 99.98:
+                    # transfer operation
+                    task_id = exec_trasfer(TRANSFER_TOKEN = TOKENS["TRANSFER_TOKEN"], 
+                                source_endpoint_id = globus_endpoints[FLAGS.machine],
+                                destination_endpoint_id = globus_endpoints['theta'],
+                                label='transfer to eagle theta MODIS',
+                                sourcepathdir=FLAGS.sourcepathdir, 
+                                destpathdir=FLAGS.destpathdir,
+                                recursive=True,
+                                )
 
-        while res == 'ACTIVE':
-            res = get_response(TRANSFER_TOKEN=TOKENS["TRANSFER_TOKEN"], 
-                        TASK_ID=task_id)
+                    while res == 'ACTIVE':
+                        res = get_response(TRANSFER_TOKEN=TOKENS["TRANSFER_TOKEN"], 
+                                    TASK_ID=task_id)
 
-            time.sleep(scrape_time)
+                        time.sleep(scrape_time)
+                    
+                    try:
+                        os.rmdir(os.path.join(*[FLAGS.sourcepathdir, day_key]) )
+                    except OSError as e:
+                        app_logger.exception(e)
 
 
