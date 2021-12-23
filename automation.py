@@ -299,7 +299,11 @@ if __name__ == "__main__":
 
     # Type globus auth
     if FLAGS.transfer:
-        TOKENS = auth_parser()
+        try:
+            clientID = os.environ["GLOBUS_CLIENT_ID"]
+        except Exception as e:
+            app_logger.exception(f"You need to register GLOBUS_CLIENT_ID as an environment variable: {e}")
+        TOKENS = auth_parser(clientID)
 
     # Call client object
     fxc = FuncXClient()
